@@ -30,9 +30,9 @@ fn main() {
     ];
 
     // let filename = "./testdata.txt";
-    let filename = "./realdata.txt";
+    // let filename = "./realdata.txt";
     // let filename = "./testdata2.txt";
-    // let filename = "./realdata2.txt";
+    let filename = "./realdata2.txt";
     let raw_lines = read_lines(filename).unwrap();
 
     let calibration_values = get_calibration_values(raw_lines, words, word_lengths, numbers);
@@ -56,7 +56,8 @@ fn print_results(calibration_values_raw: &Vec::<i64>) {
 fn get_calibration_values(raw_lines: io::Lines<BufReader<File>>, words: [&str; 9], word_lengths: [usize; 9], numbers: [&str; 9]) -> Vec::<i64> {
     raw_lines
         .filter_map(|rs| rs.ok())
-        .map(|s| words_to_nums(s, words, word_lengths, numbers))
+        .map(|s| sub_first_real_digit(s, words, word_lengths, numbers))
+        .map(|s| sub_last_real_digit(s, words, word_lengths, numbers))
         .map(|s| s.chars().collect::<Vec<char>>())
         .map(|chrs| chrs.iter().filter_map(|c| c.to_string().parse::<i64>().ok()).collect::<Vec<i64>>())
         .filter_map(|ints| match (ints.first(), ints.last()) {
@@ -67,17 +68,30 @@ fn get_calibration_values(raw_lines: io::Lines<BufReader<File>>, words: [&str; 9
         .collect()
 }
 
-fn words_to_nums(mut s: String, words: [&str; 9], word_lengths: [usize; 9], numbers: [&str; 9]) -> String {
+enum SubDigitResult {
+    Found(String),
+    NotFound(String),
+}
+
+fn sub_first_real_digit(mut s: String, words: [&str; 9], word_lengths: [usize; 9], numbers: [&str; 9]) -> String {
     // print!("Replacements in {}:\n", &s);
     for i in 0.. {
-        s = word_to_num(&mut s, i, words, word_lengths, numbers);
+        match sub_leading_digit(&mut s, i, words, word_lengths, numbers) {
+            SubDigitResult::Found(new_s) => {
+                s = new_s;
+                break;
+            },
+            SubDigitResult::NotFound(new_s) => {
+                s = new_s;
+            }
+        }
         if i >= s.len() { break; }
     }
     // print!("  Returning {}\n", &s);
     s.to_string()
 }
 
-fn word_to_num(s: &mut String, i: usize, words: [&str; 9], word_lengths: [usize; 9], numbers: [&str; 9]) -> String {
+fn sub_leading_digit(s: &mut String, i: usize, words: [&str; 9], word_lengths: [usize; 9], numbers: [&str; 9]) -> SubDigitResult {
     let remaining_length = s.len() - i;
     for w in 0..9 {
         let len = min(word_lengths[w], remaining_length);
@@ -85,10 +99,55 @@ fn word_to_num(s: &mut String, i: usize, words: [&str; 9], word_lengths: [usize;
         if &(s[i..i+len]) == words[w] {
             s.replace_range(i..i+len, numbers[w]);
             // print!("  Replaced {} with {}\n", words[w], numbers[w]);
-            break;
+            return SubDigitResult::Found(s.to_string());
         }
     }
+    for w in 0..9 {
+        if &(s[i..i+1]) == numbers[w] {
+            return SubDigitResult::Found(s.to_string());
+        }
+    }
+    SubDigitResult::NotFound(s.to_string())
+}
+
+fn sub_last_real_digit(mut s: String, words: [&str; 9], word_lengths: [usize; 9], numbers: [&str; 9]) -> String {
+    // print!("Replacements in {}:\n", &s);
+    for i in 0.. {
+        match sub_trailing_digit(&mut s, i, words, word_lengths, numbers) {
+            SubDigitResult::Found(new_s) => {
+                s = new_s;
+                break;
+            },
+            SubDigitResult::NotFound(new_s) => {
+                s = new_s;
+            }
+        }
+        if i >= s.len() { break; }
+    }
+    // print!("  Returning {}\n", &s);
     s.to_string()
+}
+
+fn sub_trailing_digit(s: &mut String, i: usize, words: [&str; 9], word_lengths: [usize; 9], numbers: [&str; 9]) -> SubDigitResult {
+    let current_length = s.len() - i;
+    for w in 0..9 {
+        let len = min(word_lengths[w], current_length);
+        if len < word_lengths[w] { continue; }
+        if &(s[s.len()-i-word_lengths[w]..s.len()-i]) == words[w] {
+            s.replace_range(s.len()-i-word_lengths[w]..s.len()-i, numbers[w]);
+            // print!("  Replaced {} with {}\n", words[w], numbers[w]);
+            return SubDigitResult::Found(s.to_string());
+        }
+    }
+    if current_length < 1 {
+        SubDigitResult::NotFound(s.to_string());
+    }
+    for w in 0..9 {
+        if &(s[s.len()-i-1..s.len()-i]) == numbers[w] {
+            return SubDigitResult::Found(s.to_string());
+        }
+    }
+    SubDigitResult::NotFound(s.to_string())
 }
 
 // The output is wrapped in a Result to allow matching on errors
